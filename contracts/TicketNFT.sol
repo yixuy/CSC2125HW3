@@ -8,7 +8,7 @@ import "hardhat/console.sol";
 contract TicketNFT is ERC1155, ITicketNFT { 
     address ownerAddress;
     
-    constructor (address ticketAddress) ERC1155("https://api.example.com/tickets/{id}.json") {
+    constructor (address ticketAddress) ERC1155("https://api.example.com/{id}.json") {
         ownerAddress = ticketAddress;
     }
 
@@ -16,7 +16,6 @@ contract TicketNFT is ERC1155, ITicketNFT {
         return address(ownerAddress);
     }
     
-
     function mintFromMarketPlace(address to, uint256 nftId) external override{
         _mint(to, nftId, 1, "");
     }

@@ -45,49 +45,48 @@ contract TicketMarketplace is ITicketMarketplace {
     function events(uint128 eventId) external view returns (Event memory) {
         return eventList[eventId];
     }
-
-    function createEvent(uint128 maxTickets, uint256 pricePerTicket, uint256 pricePerTicketERC20) public {
-        if(msg.sender != ownerAddress){
+    function checkAuthor(address sender, address checkOwnerAddress) public pure{
+        if(sender != checkOwnerAddress){
             revert("Unauthorized access");
         }
-        
+    }
+    function createEvent(uint128 maxTickets, uint256 pricePerTicket, uint256 pricePerTicketERC20) external {
+        checkAuthor(msg.sender, ownerAddress);
         eventList[currEventId] = Event(maxTickets, pricePerTicket, pricePerTicketERC20, 0);
-        
+
         emit EventCreated(currEventId, maxTickets, pricePerTicket, pricePerTicketERC20); 
         currEventId += 1;
     }
 
-    function setMaxTicketsForEvent(uint128 eventId, uint128 newMaxTickets) external{
-        if(msg.sender != ownerAddress){
-            revert("Unauthorized access");
-        }
-        
-        if(eventList[eventId].maxTickets > newMaxTickets){
+    function checkMaxTicket(uint128 checkEventMaxTickets, uint128 checkNewMaxTickets) public pure{
+        if(checkEventMaxTickets > checkNewMaxTickets){
             revert("The new number of max tickets is too small!");
         }
+    }
+
+    function setMaxTicketsForEvent(uint128 eventId, uint128 newMaxTickets) external{
+        checkAuthor(msg.sender, ownerAddress);
+        checkMaxTicket(eventList[eventId].maxTickets, newMaxTickets);
         eventList[eventId].maxTickets = newMaxTickets;
         emit MaxTicketsUpdate(eventId, newMaxTickets);
     }
 
     function setPriceForTicketETH(uint128 eventId, uint256 price) external{
-        if(msg.sender != ownerAddress){
-            revert("Unauthorized access");
-        }
+        checkAuthor(msg.sender, ownerAddress);
         eventList[eventId].pricePerTicket = price;
         emit PriceUpdate(eventId, price, "ETH");
     }
 
     function setPriceForTicketERC20(uint128 eventId, uint256 price) external{
-        if(msg.sender != ownerAddress){
-            revert("Unauthorized access");
-        }
-
+        checkAuthor(msg.sender, ownerAddress);
         eventList[eventId].pricePerTicketERC20 = price;
         emit PriceUpdate(eventId, price, "ERC20");
     }
 
-    function buyTickets(uint128 eventId, uint128 ticketCount) payable external{
-        uint256 numberTickets = type(uint256).max / eventList[eventId].pricePerTicket;
+    function checkBuyTicket(uint128 ticketCount, uint128 eventId, uint256 msgValue, bool isERC20) public view{
+        uint256 pricePerTicket = isERC20 ? eventList[eventId].pricePerTicketERC20:eventList[eventId].pricePerTicket;
+
+        uint256 numberTickets = type(uint256).max / pricePerTicket;
 
         if(ticketCount > numberTickets){
             revert("Overflow happened while calculating the total price of tickets. Try buying smaller number of tickets.");
@@ -97,10 +96,15 @@ contract TicketMarketplace is ITicketMarketplace {
             revert("We don't have that many tickets left to sell!");
         }
 
-        uint256 totalEventPrice = ticketCount * eventList[eventId].pricePerTicket;
-        if(msg.value <= totalEventPrice){
+        uint256 totalEventPrice = ticketCount * pricePerTicket;
+        if(msgValue <= totalEventPrice){
             revert("Not enough funds supplied to buy the specified number of tickets.");
         }
+    }
+
+
+    function buyTickets(uint128 eventId, uint128 ticketCount) payable external{
+        checkBuyTicket(ticketCount, eventId, msg.value, false);
 
         for(uint128 i = 0; i < ticketCount; i++){
             uint256 nftId = (uint256(eventId) << 128)  + uint256(eventList[eventId].nextTicketToSell) + i;
@@ -113,20 +117,8 @@ contract TicketMarketplace is ITicketMarketplace {
     }
 
     function buyTicketsERC20(uint128 eventId, uint128 ticketCount) public{
-        uint256 numberTickets = type(uint256).max / eventList[eventId].pricePerTicketERC20;
-
-        if(ticketCount > numberTickets){
-            revert("Overflow happened while calculating the total price of tickets. Try buying smaller number of tickets.");
-        }
+        checkBuyTicket(ticketCount, eventId, uint256(IERC20(erc20SampleCoinAddress).balanceOf(msg.sender)), true);
         
-        if(eventList[eventId].maxTickets <= eventList[eventId].nextTicketToSell + ticketCount){
-            revert("We don't have that many tickets left to sell!");
-        }
-
-        if(uint256(IERC20(erc20SampleCoinAddress).balanceOf(msg.sender)) <=(uint256(ticketCount * eventList[eventId].pricePerTicketERC20))){
-            revert("Not enough funds supplied to buy the specified number of tickets.");
-        }
-
         for(uint128 i = 0; i < ticketCount; i++){
             uint256 nftId = (uint256(eventId) << 128)  + uint256(eventList[eventId].nextTicketToSell) + i;
             ticketNFT.mintFromMarketPlace(msg.sender, nftId);
@@ -138,9 +130,7 @@ contract TicketMarketplace is ITicketMarketplace {
     }
 
     function setERC20Address(address newERC20Address) external{
-        if(msg.sender != ownerAddress){
-            revert("Unauthorized access");
-        }
+        checkAuthor(msg.sender, ownerAddress);
         erc20SampleCoinAddress = newERC20Address;
         emit ERC20AddressUpdate(newERC20Address);
     }
